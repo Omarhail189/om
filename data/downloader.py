@@ -14,8 +14,8 @@ class YahooDownloader:
     def __init__(self):
         self.raw_dir = config.raw_data_dir
 
-    def download(self, symbol: str, period=None, interval=None) -> pd.DataFrame:
-        print(f"تنزيل بيانات {symbol} من Yahoo…")
+    def fetch(self, symbol: str, period=None, interval=None) -> pd.DataFrame:
+        """Fetch validated candles in memory; continuous mode creates no CSVs."""
         try:
             raw = yf.download(
                 symbol, period=period or config.history_period,
@@ -26,8 +26,12 @@ class YahooDownloader:
         except Exception as exc:
             raise RuntimeError(f"تعذر الاتصال بمصدر البيانات: {exc}") from exc
         if raw is None or raw.empty:
-            raise RuntimeError(f"لم تصل بيانات للرمز {symbol}. يمكنك استخدام --input لتحليل CSV محلي.")
-        df = DataProcessor().normalize(raw.reset_index(), symbol=symbol)
+            raise RuntimeError(f"لم تصل بيانات للرمز {symbol} من Yahoo؛ تحقق من الاتصال أو قيود المصدر.")
+        return DataProcessor().normalize(raw.reset_index(), symbol=symbol)
+
+    def download(self, symbol: str, period=None, interval=None) -> pd.DataFrame:
+        print(f"تنزيل بيانات {symbol} من Yahoo…")
+        df = self.fetch(symbol, period=period, interval=interval)
         self.raw_dir = Path(self.raw_dir)
         self.raw_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")

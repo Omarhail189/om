@@ -8,6 +8,25 @@ import sys
 from config.settings import config
 
 
+class OmArgumentParser(argparse.ArgumentParser):
+    def parse_args(self, args=None, namespace=None):
+        parsed = super().parse_args(args, namespace)
+        if parsed.live and parsed.interval != "1m":
+            self.error("وضع --live يستخدم شموع 1m فقط.")
+        if parsed.refresh is not None and not parsed.live:
+            self.error("--refresh يُستخدم مع --live فقط.")
+        if parsed.refresh is None:
+            parsed.refresh = 60
+        return parsed
+
+
+def refresh_seconds(value):
+    number = nonnegative_int(value)
+    if not 30 <= number <= 900:
+        raise argparse.ArgumentTypeError("فترة التحديث يجب أن تكون بين 30 و900 ثانية.")
+    return number
+
+
 def nonnegative_int(value):
     try:
         number = int(value)
@@ -19,11 +38,13 @@ def nonnegative_int(value):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="تحليل CSV وحساب المؤشرات وإشارات الاستراتيجية الحالية.")
+    parser = OmArgumentParser(description="تحليل CSV أو تشغيل شاشة توصيات مستمرة من Yahoo.")
     parser.add_argument("--symbol", choices=["GSPC", "^GSPC", "TSLA"], default="GSPC", help="الرمز؛ الافتراضي GSPC")
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--input", type=Path, help="ملف CSV محدد؛ المسار النسبي من مجلد الطرفية الحالي")
     source.add_argument("--download", action="store_true", help="تنزيل بيانات جديدة بدل الملفات المحلية")
+    source.add_argument("--live", action="store_true", help="شاشة توصيات مستمرة من Yahoo؛ شموع دقيقة مغلقة")
+    parser.add_argument("--refresh", type=refresh_seconds, help="ثواني فحص المصدر في --live؛ الافتراضي 60، النطاق 30–900")
     parser.add_argument("--output-dir", type=Path, default=config.reports_dir, help="مجلد حفظ التقارير")
     parser.add_argument("--timezone", default="America/New_York", help="منطقة CSV فقط إذا لم يتضمن توقيته منطقة زمنية")
     parser.add_argument("--rows", type=nonnegative_int, default=10, help="عدد آخر الإشارات المعروضة؛ صفر لإخفائها")
@@ -41,6 +62,11 @@ def select_source(symbol, raw_dir):
 
 
 def run(args):
+    if args.live:
+        from live import run_live
+
+        return run_live(args)
+
     from data.processor import DataProcessor
     from data.indicators import IndicatorEngine
     from strategies.opening import OpeningStrategy
