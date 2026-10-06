@@ -134,7 +134,7 @@ def safe_text(text):
     return " ".join("".join(char for char in str(text) if char.isprintable()).split())
 
 
-def render_screen(monitor, now, rows=10, remaining=None):
+def render_screen(monitor, now, rows=10, remaining=None, quote_feed=None):
     now = utc_timestamp(now)
     local = now.tz_convert(NEW_YORK)
     status = monitor.status(now)
@@ -142,6 +142,24 @@ def render_screen(monitor, now, rows=10, remaining=None):
         f"شاشة توصيات om | {monitor.symbol} | المصدر: Yahoo | شموع دقيقة مغلقة",
         f"وقت العرض: {local:%Y-%m-%d %H:%M:%S %Z} | الحالة: {STATUS_NAMES[status]}",
     ]
+    if quote_feed is not None:
+        quote_status = quote_feed.status(now)
+        connection = "متصل" if quote_feed.connected else ("جارٍ الاتصال" if quote_feed.connecting else "منقطع")
+        lines.append(f"اتصال WebSocket: {connection} | Ping/Pong كل 20 ثانية | تجديد الاشتراك كل 15 ثانية")
+        if quote_feed.last_pong_at is not None:
+            pong_time = quote_feed.last_pong_at.astimezone(NEW_YORK)
+            lines.append(f"آخر Pong: {pong_time:%H:%M:%S %Z} | زمن الرد: {quote_feed.latency_ms:.0f} ms")
+        if quote_feed.error:
+            lines.append(f"خطأ WebSocket: {safe_text(quote_feed.error)} | إعادة اتصال تلقائية")
+        if quote_feed.quote is None:
+            lines.append("بانتظار أول سعر للرمز؛ اتصال مفتوح لا يعني وصول سعر بعد.")
+        else:
+            quote = quote_feed.quote
+            age = max(0, int((now - quote.source_time).total_seconds()))
+            label = "السعر اللحظي من المصدر" if quote_status == "FRESH" else "آخر سعر WebSocket (متأخر أو سابق)"
+            lines.append(f"{label}: {quote.price:.2f} | وقت المصدر: {quote.source_time.astimezone(NEW_YORK):%Y-%m-%d %H:%M:%S %Z} | العمر: {age} ثانية")
+        if quote_feed.invalid_messages:
+            lines.append(f"رسائل أسعار غير صالحة أُهملت: {quote_feed.invalid_messages}")
     if monitor.checked_at is not None:
         lines.append(f"آخر فحص للمصدر: {monitor.checked_at.tz_convert(NEW_YORK):%H:%M:%S %Z}")
     if monitor.error:
@@ -153,6 +171,8 @@ def render_screen(monitor, now, rows=10, remaining=None):
         lines.append(f"آخر سعر إغلاق من المصدر: {snapshot.latest_price:.2f}")
         lines.append(f"آخر شمعة مغلقة (بداية): {candle:%Y-%m-%d %H:%M:%S %Z} | عمر نهايتها: {age} ثانية")
         current = monitor.current(now)
+        if quote_feed is not None and quote_feed.status(now) != "FRESH":
+            current = None
         if current is not None:
             signal = current["SIGNAL"]
             lines.append(f"التوصية الحالية: {SIGNAL_NAMES.get(signal, signal)} ({signal}) | نقاط الشروط: {int(current['SCORE'])}/110")
@@ -172,12 +192,13 @@ def render_screen(monitor, now, rows=10, remaining=None):
                 signal = row["SIGNAL"]
                 lines.append(f"{stamp:%m-%d %H:%M} | {row['Close']:.2f} | {int(row['SCORE']):3d} | {SIGNAL_NAMES.get(signal, signal)} ({signal})")
     else:
-        lines.append("لا توجد بيانات مقبولة بعد؛ لا تُستخدم الملفات التاريخية بدل المصدر.")
+        lines.append("لا توجد شموع مقبولة لحساب التوصية بعد؛ لا تُستخدم الملفات التاريخية بدل المصدر.")
     wait = monitor.next_delay if remaining is None else remaining
     timing = "جارٍ جلب البيانات من Yahoo…" if monitor.updating else f"الفحص التالي بعد {wait} ثانية"
     lines.extend([
         "", f"{timing} | للإيقاف: Ctrl+C",
-        "تحديث دوري من Yahoo؛ قد يتأخر المصدر. النقاط ليست نسبة نجاح. لا تنفيذ صفقات.",
+        ("السعر عبر WebSocket والشموع تُحدّث مستقلًا؛ قد يتأخر المصدر." if quote_feed is not None else "تحديث دوري من Yahoo؛ قد يتأخر المصدر.")
+        + " النقاط ليست نسبة نجاح. لا تنفيذ صفقات.",
     ])
     return "\n".join(lines)
 

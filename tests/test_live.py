@@ -275,7 +275,7 @@ class LiveCliTests(unittest.TestCase):
             self.fail("--live entry point is missing")
         out, err = io.StringIO(), io.StringIO()
         with patch("data.downloader.yf.download", side_effect=KeyboardInterrupt), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            result = main(["--live"])
+            result = main(["--live", "--transport", "poll"])
         self.assertEqual(result, 130)
         self.assertIn("أُوقف", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())

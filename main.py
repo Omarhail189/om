@@ -17,6 +17,10 @@ class OmArgumentParser(argparse.ArgumentParser):
             self.error("--refresh يُستخدم مع --live فقط.")
         if parsed.refresh is None:
             parsed.refresh = 60
+        if parsed.transport is not None and not parsed.live:
+            self.error("--transport يُستخدم مع --live فقط.")
+        if parsed.transport is None:
+            parsed.transport = "websocket"
         return parsed
 
 
@@ -43,8 +47,9 @@ def build_parser():
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--input", type=Path, help="ملف CSV محدد؛ المسار النسبي من مجلد الطرفية الحالي")
     source.add_argument("--download", action="store_true", help="تنزيل بيانات جديدة بدل الملفات المحلية")
-    source.add_argument("--live", action="store_true", help="شاشة توصيات مستمرة من Yahoo؛ شموع دقيقة مغلقة")
-    parser.add_argument("--refresh", type=refresh_seconds, help="ثواني فحص المصدر في --live؛ الافتراضي 60، النطاق 30–900")
+    source.add_argument("--live", action="store_true", help="شاشة أسعار WebSocket مستمرة وتوصيات شموع مغلقة")
+    parser.add_argument("--transport", choices=["websocket", "poll"], help="مصدر عرض السعر في --live؛ الافتراضي websocket")
+    parser.add_argument("--refresh", type=refresh_seconds, help="ثواني تحديث الشموع؛ السعر عبر WebSocket لا ينتظرها. الافتراضي 60، النطاق 30–900")
     parser.add_argument("--output-dir", type=Path, default=config.reports_dir, help="مجلد حفظ التقارير")
     parser.add_argument("--timezone", default="America/New_York", help="منطقة CSV فقط إذا لم يتضمن توقيته منطقة زمنية")
     parser.add_argument("--rows", type=nonnegative_int, default=10, help="عدد آخر الإشارات المعروضة؛ صفر لإخفائها")
@@ -63,6 +68,10 @@ def select_source(symbol, raw_dir):
 
 def run(args):
     if args.live:
+        if args.transport == "websocket":
+            from websocket_live import run_websocket
+
+            return run_websocket(args)
         from live import run_live
 
         return run_live(args)
