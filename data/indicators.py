@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import ta
 
 from data.processor import DataProcessor
@@ -8,6 +9,9 @@ class IndicatorEngine:
 
     def add_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
 
+        DataProcessor().validate(df)
+        if len(df) < 200:
+            raise ValueError("يلزم توفير 200 شمعة على الأقل لحساب EMA_200.")
         df = df.copy()
 
         # ==========================
@@ -61,7 +65,11 @@ class IndicatorEngine:
         # ==========================
         df["RVOL"] = df["Volume"] / df["Volume"].rolling(20).mean()
 
+        numeric = df.select_dtypes(include="number").columns
+        df[numeric] = df[numeric].replace([np.inf, -np.inf], np.nan)
         df.dropna(inplace=True)
+        if df.empty:
+            raise ValueError("لا توجد شموع صالحة بعد حساب المؤشرات؛ تحقق من طول البيانات والحجم.")
 
         df.reset_index(drop=True, inplace=True)
 
@@ -69,25 +77,7 @@ class IndicatorEngine:
 
 
 if __name__ == "__main__":
+    import sys
+    from main import main
 
-    from pathlib import Path
-
-    latest = sorted(Path("data/raw").glob("*.csv"))[-1]
-
-    processor = DataProcessor()
-
-    df = processor.load_csv(latest)
-
-    engine = IndicatorEngine()
-
-    df = engine.add_indicators(df)
-
-    print(df.head())
-
-    print()
-
-    print(df.columns.tolist())
-
-    print()
-
-    print(df.info())
+    sys.exit(main(sys.argv[1:]))

@@ -175,65 +175,7 @@ class OpeningStrategy:
 
 
 if __name__ == "__main__":
+    import sys
+    from main import main
 
-    from pathlib import Path
-
-    latest = sorted(Path("data/raw").glob("*.csv"))[-1]
-
-    processor = DataProcessor()
-
-    df = processor.load_csv(latest)
-
-    indicators = IndicatorEngine()
-
-    df = indicators.add_indicators(df)
-
-    strategy = OpeningStrategy()
-
-    df = strategy.generate(df)
-
-    print(
-        df[
-            [
-                "Datetime",
-                "Close",
-                "SCORE",
-                "SIGNAL",
-                "REASON",
-            ]
-        ].tail(40)
-    )
-
-    print("\n" + "=" * 60)
-    print("Signal Summary")
-    print("=" * 60)
-
-    print(df["SIGNAL"].value_counts())
-
-    print("\n" + "=" * 60)
-    print("Average Score")
-    print("=" * 60)
-
-    print(round(df["SCORE"].mean(), 2))
-
-    print("\n" + "=" * 60)
-    print("Top Signals")
-    print("=" * 60)
-
-    top = (
-        df[df["SIGNAL"].isin(["BUY", "STRONG BUY"])]
-        .sort_values("SCORE", ascending=False)
-        .head(20)
-    )
-
-    print(
-        top[
-            [
-                "Datetime",
-                "Close",
-                "SCORE",
-                "SIGNAL",
-                "REASON",
-            ]
-        ]
-    )
+    sys.exit(main(sys.argv[1:]))
